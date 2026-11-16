@@ -49,6 +49,14 @@ const DEFAULT_COL_WIDTH_EMU = 64 * EMU_PER_PIXEL;
 const DEFAULT_ROW_HEIGHT_EMU = 20 * EMU_PER_PIXEL;
 const DEFAULT_COLUMN_CHARACTER_WIDTH_PX = 7;
 const pictureSources = new WeakMap<XlsxImage, { node: Element; width: number; height: number; layoutWidth: number; layoutHeight: number }>();
+const shapeSources = new WeakMap<XlsxShape, {
+  properties: Element;
+  style: Element | null;
+  width: number;
+  height: number;
+  layoutWidth: number;
+  layoutHeight: number;
+}>();
 const columnCharacterWidthCache = new Map<string, number>();
 type DukeWorksheet = ReturnType<Workbook["getSheet"]>;
 
@@ -306,7 +314,19 @@ type ThemeState = {
   colors: Map<string, string>;
   majorLatinFont: string | null;
   minorLatinFont: string | null;
+  /**
+   * The theme's style matrix as XML, for shapes' fillRef, lnRef and effectRef.
+   * Effect styles hold just their effectLst or effectDag ("" when they have none).
+   */
+  styles: {
+    backgroundFill: string[];
+    effect: string[];
+    fill: string[];
+    line: string[];
+  };
 };
+
+const DRAWINGML_NAMESPACE = "http://schemas.openxmlformats.org/drawingml/2006/main";
 
 type DrawingColor = {
   color: string;
@@ -783,7 +803,8 @@ function parseWorkbookTheme(archive: ArchiveEntries): ThemeState {
       ["tx2", "#6e747a"]
     ]),
     majorLatinFont: null,
-    minorLatinFont: null
+    minorLatinFont: null,
+    styles: { backgroundFill: [], effect: [], fill: [], line: [] }
   };
 
   const themeXml = readArchiveText(archive, "xl/theme/theme1.xml");
@@ -814,6 +835,21 @@ function parseWorkbookTheme(archive: ArchiveEntries): ThemeState {
   const majorLatinFont = getFirstChild(getFirstChild(fontSchemeNode, "majorFont"), "latin")?.getAttribute("typeface") ?? null;
   const minorLatinFont = getFirstChild(getFirstChild(fontSchemeNode, "minorFont"), "latin")?.getAttribute("typeface") ?? null;
 
+  const formatSchemeNode = getLocalElements(themeDocument, "fmtScheme")[0] ?? null;
+  const readStyleList = (listName: string) => {
+    const listNode = formatSchemeNode ? getFirstChild(formatSchemeNode, listName) : null;
+    return listNode ? Array.from(listNode.childNodes).filter(isElementNode) : [];
+  };
+  const styles: ThemeState["styles"] = {
+    backgroundFill: readStyleList("bgFillStyleLst").map((node) => serializeWorkbookXml(node)),
+    effect: readStyleList("effectStyleLst").map((node) => {
+      const effects = getFirstChild(node, "effectLst") ?? getFirstChild(node, "effectDag");
+      return effects ? serializeWorkbookXml(effects) : "";
+    }),
+    fill: readStyleList("fillStyleLst").map((node) => serializeWorkbookXml(node)),
+    line: readStyleList("lnStyleLst").map((node) => serializeWorkbookXml(node))
+  };
+
   colors.set("bg1", colors.get("lt1") ?? defaultTheme.colors.get("bg1") ?? "#ffffff");
   colors.set("tx1", colors.get("dk1") ?? defaultTheme.colors.get("tx1") ?? "#000000");
   colors.set("bg2", colors.get("lt2") ?? defaultTheme.colors.get("bg2") ?? "#e7e6e6");
@@ -822,7 +858,8 @@ function parseWorkbookTheme(archive: ArchiveEntries): ThemeState {
   return {
     colors,
     majorLatinFont,
-    minorLatinFont
+    minorLatinFont,
+    styles
   };
 }
 
@@ -3014,7 +3051,8 @@ function parseShapeNode(
   workbookSheetIndex: number,
   shapeId: string,
   zIndex: number,
-  parentGroup: GroupTransform | null
+  parentGroup: GroupTransform | null,
+  sheetState: WorkbookSheetState | null
 ) {
   const nonVisualProps = getFirstDescendant(shapeNode, "cNvPr");
   const styleNode = getFirstChild(shapeNode, "style");
@@ -3023,7 +3061,7 @@ function parseShapeNode(
     ?? (getFirstDescendant(shapeNode, "custGeom") ? "custom" : "rect");
   const customPath = geometry === "custom" ? parseCustomGeometryPath(shapeNode) : undefined;
   const geometryAdjustments = parseShapeGeometryAdjustments(shapeNode);
-  return {
+  const shape = {
     anchor: transform.anchor,
     description: nonVisualProps?.getAttribute("descr") ?? undefined,
     fill: parseShapeFill(shapeNode, styleNode, theme, geometry),
@@ -3047,6 +3085,27 @@ function parseShapeNode(
     workbookSheetIndex,
     zIndex
   } satisfies XlsxShape;
+  const properties = getFirstChild(shapeNode, "spPr");
+  if (properties) {
+    // As for pictures: a grouped shape's layout box is its own transform, but
+    // a top-level shape's is its cell anchor, which Excel stores with width
+    // and height swapped when the shape is turned a quarter turn.
+    const rect = anchorToAbsoluteRect(transform.anchor, sheetState);
+    const localRect = parseTransformRect(getFirstDescendant(shapeNode, "xfrm"));
+    const layoutWidth = emuToPixels(parentGroup && localRect ? localRect.cx : rect.cx);
+    const layoutHeight = emuToPixels(parentGroup && localRect ? localRect.cy : rect.cy);
+    const rotation = ((transform.rotationDeg % 180) + 180) % 180;
+    const swapAxes = !parentGroup && rotation >= 45 && rotation < 135;
+    shapeSources.set(shape, {
+      properties,
+      style: styleNode,
+      width: swapAxes ? layoutHeight : layoutWidth,
+      height: swapAxes ? layoutWidth : layoutHeight,
+      layoutWidth,
+      layoutHeight
+    });
+  }
+  return shape;
 }
 
 function parseAnchorContents(
@@ -3109,7 +3168,8 @@ function parseAnchorContents(
         workbookSheetIndex,
         `shape-${workbookSheetIndex}-${ids.shape++}`,
         ids.z++,
-        parentGroup
+        parentGroup,
+        sheetState
       ));
       return;
     }
@@ -3123,7 +3183,8 @@ function parseAnchorContents(
         workbookSheetIndex,
         `shape-${workbookSheetIndex}-${ids.shape++}`,
         ids.z++,
-        parentGroup
+        parentGroup,
+        sheetState
       ));
       return;
     }
@@ -3237,7 +3298,11 @@ function parseDrawingObjects(
     const ordered = [...parsed.images, ...parsed.shapes].sort((a, b) => a.zIndex - b.zIndex);
     const layer = (item: XlsxImage | XlsxShape) => zIndexBase + anchorIndex + ordered.indexOf(item) / (ordered.length + 1);
     parsed.images.forEach((image) => images.push({ ...image, zIndex: layer(image) }));
-    parsed.shapes.forEach((shape) => shapes.push({ ...shape, zIndex: layer(shape) }));
+    // Updated in place, not copied: shapeSources is keyed by the parsed object.
+    parsed.shapes.forEach((shape) => {
+      shape.zIndex = layer(shape);
+      shapes.push(shape);
+    });
     parsed.mediaPaths.forEach((path) => mediaPaths.add(path));
   });
 
@@ -3399,17 +3464,125 @@ function hasPictureDecoration(node: Element): boolean {
   return ["blip", "effectLst"].some((name) => Array.from(getFirstDescendant(node, name)?.children ?? []).some((child) => child.localName !== "extLst"));
 }
 
+function createOfficeArtColorResolver(theme: ThemeState) {
+  return (xml: string) => {
+    const document = parseXml(`<root xmlns:a="${DRAWINGML_NAMESPACE}">${xml}</root>`);
+    const color = document && Array.from(document.getElementsByTagName("*")).find((element) => ["srgbClr", "schemeClr", "scrgbClr", "sysClr"].includes(element.localName));
+    return JSON.stringify(resolveColorValue(color || null, theme));
+  };
+}
+
+/**
+ * The theme style a shape's fillRef, lnRef or effectRef points to, with the
+ * theme's placeholder colour (phClr) replaced by the reference's own colour.
+ * Any modifiers on phClr (shade, tint, ...) apply after the reference's.
+ */
+function resolveThemeStyleReference(
+  theme: ThemeState,
+  kind: "fill" | "line" | "effect",
+  index: number,
+  referenceXml: string
+) {
+  // fillRef indexes from 1001 select the background fills.
+  const list = kind === "line"
+    ? theme.styles.line
+    : kind === "effect"
+      ? theme.styles.effect
+      : index > 1000 ? theme.styles.backgroundFill : theme.styles.fill;
+  const styleXml = list[(kind === "fill" && index > 1000 ? index - 1000 : index) - 1];
+  if (styleXml === undefined || styleXml === "") {
+    return styleXml;
+  }
+
+  const document = parseXml(`<root xmlns:a="${DRAWINGML_NAMESPACE}">${styleXml}${referenceXml}</root>`);
+  const [style, reference] = document?.documentElement
+    ? Array.from(document.documentElement.childNodes).filter(isElementNode)
+    : [];
+  if (!style) {
+    return undefined;
+  }
+
+  const placeholderColor = reference ? Array.from(reference.childNodes).filter(isElementNode)[0] : undefined;
+  for (const placeholder of getLocalElements(style, "schemeClr").filter((node) => node.getAttribute("val") === "phClr")) {
+    if (!placeholderColor || !placeholder.parentNode) {
+      return undefined;
+    }
+    const color = placeholderColor.cloneNode(true) as Element;
+    for (const modifier of Array.from(placeholder.childNodes)) {
+      color.appendChild(modifier.cloneNode(true));
+    }
+    placeholder.parentNode.insertBefore(color, placeholder);
+    placeholder.parentNode.removeChild(placeholder);
+  }
+  return serializeWorkbookXml(style);
+}
+
+/**
+ * Render each shape's geometry, fill and outline with Office Art and show it
+ * as a non-editable picture at the shape's place and z-order. The shape keeps
+ * only its text and hyperlink. A shape Office Art can't render keeps the
+ * viewer's own approximate drawing.
+ */
+async function renderWorkbookShapes(assets: WorkbookImageAssets, theme: ThemeState) {
+  if (assets.shapesByWorkbookSheetIndex.every((shapes) => !shapes?.length)) return;
+  const { loadOfficeArt } = await import("./office-art/loader");
+  const renderer = await loadOfficeArt();
+  const resolveColor = createOfficeArtColorResolver(theme);
+  const resolveStyle = (kind: "fill" | "line" | "effect", index: number, referenceXml: string) =>
+    resolveThemeStyleReference(theme, kind, index, referenceXml);
+  let unsupportedCount = 0;
+  assets.shapesByWorkbookSheetIndex.forEach((shapes, workbookSheetIndex) => {
+    for (const shape of shapes ?? []) {
+      const source = shapeSources.get(shape);
+      if (!source) continue;
+      shapeSources.delete(shape);
+      const rendered = renderer.renderShape(
+        serializeWorkbookXml(source.properties),
+        source.style ? serializeWorkbookXml(source.style) : "",
+        source.width,
+        source.height,
+        resolveColor,
+        resolveStyle
+      );
+      const bounds = rendered?.paintBounds;
+      if (!rendered || !bounds) {
+        unsupportedCount += 1;
+        continue;
+      }
+      (assets.imagesByWorkbookSheetIndex[workbookSheetIndex] ??= []).push({
+        anchor: shape.anchor,
+        editable: false,
+        id: `${shape.id}-artwork`,
+        mimeType: "image/svg+xml",
+        paintBounds: {
+          ...bounds,
+          xPx: bounds.xPx + (source.layoutWidth - source.width) / 2,
+          yPx: bounds.yPx + (source.layoutHeight - source.height) / 2,
+          layoutWidthPx: source.layoutWidth,
+          layoutHeightPx: source.layoutHeight
+        },
+        pictureRenderStatus: "rendered",
+        sheetIndex: shape.sheetIndex,
+        src: createImageSource(strToU8(rendered.svg), "image/svg+xml", assets.objectUrls),
+        workbookSheetIndex,
+        zIndex: shape.zIndex
+      });
+      shape.fill = { none: true };
+      shape.stroke = { none: true };
+    }
+  });
+  if (unsupportedCount > 0) {
+    console.warn(`${unsupportedCount} shape(s) could not be rendered exactly; approximate drawings are displayed.`);
+  }
+}
+
 async function renderWorkbookPictures(assets: WorkbookImageAssets, theme: ThemeState) {
   const images = assets.imagesByWorkbookSheetIndex.flat();
   if (images.length === 0) return;
   const { loadOfficeArt } = await import("./office-art/loader");
   const renderer = await loadOfficeArt();
   const sources = new Map<string, string>();
-  const resolveColor = (xml: string) => {
-    const document = parseXml(`<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">${xml}</root>`);
-    const color = document && Array.from(document.getElementsByTagName("*")).find((element) => ["srgbClr", "schemeClr", "scrgbClr", "sysClr"].includes(element.localName));
-    return JSON.stringify(resolveColorValue(color || null, theme));
-  };
+  const resolveColor = createOfficeArtColorResolver(theme);
   for (const image of images) {
     const picture = pictureSources.get(image);
     if (!picture || !image.mediaPath) continue;
@@ -3544,6 +3717,7 @@ export async function parseWorkbookImageAssets(
   };
   try {
     await renderWorkbookPictures(assets, theme);
+    await renderWorkbookShapes(assets, theme);
     return assets;
   } catch (error) {
     revokeWorkbookImageAssets(assets);
