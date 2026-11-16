@@ -1,0 +1,131 @@
+diff --git a/crates/duke-sheets-core/src/cell/view.rs b/crates/duke-sheets-core/src/cell/view.rs
+index f6f8d09..19ef1b2 100644
+--- a/crates/duke-sheets-core/src/cell/view.rs
++++ b/crates/duke-sheets-core/src/cell/view.rs
+@@ -360,14 +360,26 @@ mod tests {
+ 
+     #[test]
+     fn builtin_date_short_1900() {
+-        // Format ID 14: "mm-dd-yy"
++        // Format ID 14: Excel's en-US short date, "m/d/yyyy"
+         // Serial 44927 = 2023-01-01 in 1900 system
+         let result = fmt(
+             &CellValue::Number(44927.0),
+             &NumberFormat::BuiltIn(14),
+             false,
+         );
+-        assert_eq!(result, "01-01-23");
++        assert_eq!(result, "1/1/2023");
++    }
++
++    #[test]
++    fn builtin_datetime_1900() {
++        // Format ID 22: Excel's en-US short date and time, "m/d/yyyy h:mm"
++        // Serial 44927.5625 = 2023-01-01 13:30
++        let result = fmt(
++            &CellValue::Number(44927.5625),
++            &NumberFormat::BuiltIn(22),
++            false,
++        );
++        assert_eq!(result, "1/1/2023 13:30");
+     }
+ 
+     #[test]
+@@ -414,7 +426,7 @@ mod tests {
+             &NumberFormat::BuiltIn(14),
+             true,
+         );
+-        assert_eq!(result, "01-01-23");
++        assert_eq!(result, "1/1/2023");
+     }
+ 
+     // Time formats
+diff --git a/crates/duke-sheets-core/src/style/number_format.rs b/crates/duke-sheets-core/src/style/number_format.rs
+index af4ec90..95dca83 100644
+--- a/crates/duke-sheets-core/src/style/number_format.rs
++++ b/crates/duke-sheets-core/src/style/number_format.rs
+@@ -40,7 +40,7 @@ impl NumberFormat {
+     pub const ID_FRACTION: u32 = 12;
+     /// 13 - # ??/??
+     pub const ID_FRACTION2: u32 = 13;
+-    /// 14 - mm-dd-yy
++    /// 14 - short date (m/d/yyyy in en-US)
+     pub const ID_DATE_SHORT: u32 = 14;
+     /// 15 - d-mmm-yy
+     pub const ID_DATE_MEDIUM: u32 = 15;
+@@ -56,7 +56,7 @@ impl NumberFormat {
+     pub const ID_TIME_24H: u32 = 20;
+     /// 21 - h:mm:ss
+     pub const ID_TIME_24H_SEC: u32 = 21;
+-    /// 22 - m/d/yy h:mm
++    /// 22 - short date and time (m/d/yyyy h:mm in en-US)
+     pub const ID_DATETIME: u32 = 22;
+     /// 37 - #,##0 ;(#,##0)
+     pub const ID_ACCOUNTING_INT: u32 = 37;
+@@ -114,7 +114,7 @@ impl NumberFormat {
+         NumberFormat::BuiltIn(Self::ID_SCIENTIFIC)
+     }
+ 
+-    /// Short date (mm-dd-yy)
++    /// Short date (m/d/yyyy in en-US)
+     pub fn date_short() -> Self {
+         NumberFormat::BuiltIn(Self::ID_DATE_SHORT)
+     }
+@@ -124,7 +124,7 @@ impl NumberFormat {
+         NumberFormat::BuiltIn(Self::ID_TIME_AMPM)
+     }
+ 
+-    /// Date and time (m/d/yy h:mm)
++    /// Date and time (m/d/yyyy h:mm in en-US)
+     pub fn datetime() -> Self {
+         NumberFormat::BuiltIn(Self::ID_DATETIME)
+     }
+@@ -147,6 +147,11 @@ impl NumberFormat {
+     ///
+     /// Reference: ECMA-376 Section 18.8.30 (numFmt), plus the implicit
+     /// built-in formats defined by the spec and Microsoft documentation.
++    ///
++    /// IDs 14 and 22 are locale-dependent: Excel shows them in the system's
++    /// short-date style rather than the spec's literal codes ("mm-dd-yy" and
++    /// "m/d/yy h:mm"). They use Excel's en-US style, matching the en-US
++    /// month and day names used for other date formats.
+     fn builtin_format_string(id: u32) -> &'static str {
+         match id {
+             0 => "General",
+@@ -163,7 +168,7 @@ impl NumberFormat {
+             11 => "0.00E+00",
+             12 => "# ?/?",
+             13 => "# ??/??",
+-            14 => "mm-dd-yy",
++            14 => "m/d/yyyy",
+             15 => "d-mmm-yy",
+             16 => "d-mmm",
+             17 => "mmm-yy",
+@@ -171,7 +176,7 @@ impl NumberFormat {
+             19 => "h:mm:ss AM/PM",
+             20 => "h:mm",
+             21 => "h:mm:ss",
+-            22 => "m/d/yy h:mm",
++            22 => "m/d/yyyy h:mm",
+             37 => "#,##0_);(#,##0)",
+             38 => "#,##0_);[Red](#,##0)",
+             39 => "#,##0.00_);(#,##0.00)",
+diff --git a/crates/duke-sheets-xlsx/src/pivots.rs b/crates/duke-sheets-xlsx/src/pivots.rs
+index f00ff95..fc72852 100644
+--- a/crates/duke-sheets-xlsx/src/pivots.rs
++++ b/crates/duke-sheets-xlsx/src/pivots.rs
+@@ -311,12 +311,12 @@ fn numeric_format(formats: &BTreeMap<usize, String>, id: usize) -> Option<String
+         4 => Some("#,##0.00".into()),
+         9 => Some("0%".into()),
+         10 => Some("0.00%".into()),
+-        14 => Some("m/d/yy".into()),
++        14 => Some("m/d/yyyy".into()),
+         15 => Some("d-mmm-yy".into()),
+         16 => Some("d-mmm".into()),
+         17 => Some("mmm-yy".into()),
+         20 => Some("h:mm".into()),
+-        22 => Some("m/d/yy h:mm".into()),
++        22 => Some("m/d/yyyy h:mm".into()),
+         _ => None,
+     })
+ }
