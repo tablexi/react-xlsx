@@ -56,6 +56,45 @@ export function renderPicture(xml, source, width, height, colors) {
         wasm.__wbindgen_add_to_stack_pointer(16);
     }
 }
+
+/**
+ * Render a shape or connector's geometry, fill and outline. `styles` resolves
+ * a theme style reference: it receives "fill", "line" or "effect", the
+ * reference's index and its XML, and returns the theme style's XML with the
+ * placeholder colour applied, or undefined.
+ * @param {string} properties_xml
+ * @param {string} style_xml
+ * @param {number} width
+ * @param {number} height
+ * @param {Function} colors
+ * @param {Function} styles
+ * @returns {string | undefined}
+ */
+export function renderShape(properties_xml, style_xml, width, height, colors, styles) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(properties_xml, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(style_xml, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.renderShape(retptr, ptr0, len0, ptr1, len1, width, height, addHeapObject(colors), addHeapObject(styles));
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+        if (r3) {
+            throw takeObject(r2);
+        }
+        let v3;
+        if (r0 !== 0) {
+            v3 = getStringFromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export4(r0, r1 * 1, 1);
+        }
+        return v3;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
@@ -74,11 +113,20 @@ function __wbg_get_imports() {
         __wbg___wbindgen_throw_bbadd78c1bac3a77: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
         },
+        __wbg_call_2ad4e88518737145: function() { return handleError(function (arg0, arg1, arg2, arg3, arg4) {
+            const ret = getObject(arg0).call(getObject(arg1), getObject(arg2), getObject(arg3), getObject(arg4));
+            return addHeapObject(ret);
+        }, arguments); },
         __wbg_call_ec09a4cf93377d3a: function() { return handleError(function (arg0, arg1, arg2) {
             const ret = getObject(arg0).call(getObject(arg1), getObject(arg2));
             return addHeapObject(ret);
         }, arguments); },
-        __wbindgen_cast_0000000000000001: function(arg0, arg1) {
+        __wbindgen_cast_0000000000000001: function(arg0) {
+            // Cast intrinsic for `F64 -> Externref`.
+            const ret = arg0;
+            return addHeapObject(ret);
+        },
+        __wbindgen_cast_0000000000000002: function(arg0, arg1) {
             // Cast intrinsic for `Ref(String) -> Externref`.
             const ret = getStringFromWasm0(arg0, arg1);
             return addHeapObject(ret);

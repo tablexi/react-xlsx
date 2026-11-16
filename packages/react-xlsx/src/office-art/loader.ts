@@ -1,5 +1,5 @@
 import { gunzipSync } from "fflate";
-import { initSync, normalizeRaster, renderPicture } from "./generated/office_art.js";
+import { initSync, normalizeRaster, renderPicture, renderShape } from "./generated/office_art.js";
 import payload from "./generated/payload.js";
 
 export type PicturePaintBounds = {
@@ -31,6 +31,17 @@ export async function loadOfficeArt() {
     normalizeRaster,
     renderPicture(xml: string, source: string, width: number, height: number, resolveColor: (xml: string) => string): RenderedPicture | null {
       const output = renderPicture(xml, source, width, height, resolveColor);
+      return output ? JSON.parse(output) as RenderedPicture : null;
+    },
+    renderShape(
+      propertiesXml: string,
+      styleXml: string,
+      width: number,
+      height: number,
+      resolveColor: (xml: string) => string,
+      resolveStyle: (kind: "fill" | "line" | "effect", index: number, referenceXml: string) => string | undefined
+    ): RenderedPicture | null {
+      const output = renderShape(propertiesXml, styleXml, width, height, resolveColor, resolveStyle);
       return output ? JSON.parse(output) as RenderedPicture : null;
     }
   };
