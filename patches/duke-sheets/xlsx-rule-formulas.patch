@@ -1,0 +1,175 @@
+diff --git a/bindings/wasm/src/lib.rs b/bindings/wasm/src/lib.rs
+index f19f85c..085ad0e 100644
+--- a/bindings/wasm/src/lib.rs
++++ b/bindings/wasm/src/lib.rs
+@@ -1104,6 +1104,28 @@ impl Worksheet {
+         Ok(CellValue { inner: value })
+     }
+ 
++    /// The cells where a conditional-format formula holds, as flat
++    /// `[row, col, ...]` pairs. `ranges` are flat zero-based
++    /// `[startRow, startCol, endRow, endCol, ...]` quadruples; the formula is
++    /// written for the top-left cell of the first.
++    #[wasm_bindgen(js_name = conditionalFormulaMatches)]
++    pub fn conditional_formula_matches(&self, formula: &str, ranges: Vec<u32>) -> Result<Vec<u32>, JsError> {
++        let ranges: Vec<CellRange> = ranges
++            .chunks_exact(4)
++            .map(|range| {
++                CellRange::new(
++                    CellAddress::new(range[0], range[1] as u16),
++                    CellAddress::new(range[2], range[3] as u16),
++                )
++            })
++            .collect();
++        let wb = self.workbook.borrow();
++        Ok(duke_sheets::conditional_format::conditional_formula_matches(&wb, self.sheet_index, formula, &ranges)
++            .into_iter()
++            .flat_map(|cell| [cell.row, u32::from(cell.col)])
++            .collect())
++    }
++
+     #[wasm_bindgen(js_name = usedRange)]
+     pub fn used_range(&self) -> Result<JsValue, JsError> {
+         let wb = self.workbook.borrow();
+diff --git a/crates/duke-sheets-xlsx/src/reader/formulas.rs b/crates/duke-sheets-xlsx/src/reader/formulas.rs
+index 38997bd..45d16f8 100644
+--- a/crates/duke-sheets-xlsx/src/reader/formulas.rs
++++ b/crates/duke-sheets-xlsx/src/reader/formulas.rs
+@@ -101,7 +101,9 @@ pub(super) fn resolve_cell_formula(
+     }
+ }
+ 
+-pub(super) fn translate_shared_formula(
++/// Move a formula written for `base_cell_ref` to `cell_ref`, shifting its
++/// relative references as Excel does for shared and conditional-format formulas.
++pub fn translate_shared_formula(
+     formula: &str,
+     base_cell_ref: &str,
+     cell_ref: &str,
+diff --git a/crates/duke-sheets-xlsx/src/reader/mod.rs b/crates/duke-sheets-xlsx/src/reader/mod.rs
+index 11d170d..e6777ef 100644
+--- a/crates/duke-sheets-xlsx/src/reader/mod.rs
++++ b/crates/duke-sheets-xlsx/src/reader/mod.rs
+@@ -52,6 +52,7 @@ mod theme;
+ mod workbook;
+ 
+ pub(crate) use formulas::CellFormulaState;
++pub use formulas::translate_shared_formula;
+ use shared_strings::SharedStringEntry;
+ 
+ use workbook::{read_part_rels, read_workbook_rels, read_workbook_xml};
+diff --git a/crates/duke-sheets/src/conditional_format.rs b/crates/duke-sheets/src/conditional_format.rs
+new file mode 100644
+index 0000000..5d189ab
+--- /dev/null
++++ b/crates/duke-sheets/src/conditional_format.rs
+@@ -0,0 +1,97 @@
++//! Evaluating formula-based conditional formatting rules.
++
++use duke_sheets_core::{CellAddress, CellRange, Workbook};
++use duke_sheets_formula::{evaluate, parse_formula, EvaluationContext, FormulaValue};
++use duke_sheets_xlsx::reader::translate_shared_formula;
++
++/// The cells in `ranges` where a conditional-format formula holds.
++///
++/// As in Excel, the formula is written for the top-left cell of the first
++/// range; for every other cell its relative references are shifted by that
++/// cell's offset. A cell matches when the formula returns TRUE or a non-zero
++/// number. Cells outside the sheet's used range are not checked.
++pub fn conditional_formula_matches(
++    workbook: &Workbook,
++    sheet_index: usize,
++    formula: &str,
++    ranges: &[CellRange],
++) -> Vec<CellAddress> {
++    let (Some(first), Some(used)) = (
++        ranges.first(),
++        workbook.worksheet(sheet_index).and_then(|sheet| sheet.used_range()),
++    ) else {
++        return Vec::new();
++    };
++    let formula = format!("={}", formula.trim().trim_start_matches('='));
++    let anchor = first.start.to_a1_string();
++    let mut matches = Vec::new();
++    for range in ranges {
++        for row in range.start.row.max(used.start.row)..=range.end.row.min(used.end.row) {
++            for col in range.start.col.max(used.start.col)..=range.end.col.min(used.end.col) {
++                let cell = CellAddress::new(row, col);
++                let shifted = translate_shared_formula(&formula, &anchor, &cell.to_a1_string());
++                let Ok(expression) = parse_formula(&shifted) else {
++                    continue;
++                };
++                let context = EvaluationContext::new(Some(workbook), sheet_index, row, col);
++                if evaluate(&expression, &context).is_ok_and(|value| is_true(&value)) {
++                    matches.push(cell);
++                }
++            }
++        }
++    }
++    matches
++}
++
++fn is_true(value: &FormulaValue) -> bool {
++    match value {
++        FormulaValue::Boolean(value) => *value,
++        FormulaValue::Number(value) => *value != 0.0,
++        FormulaValue::Array { data, .. } => data.first().and_then(|row| row.first()).is_some_and(is_true),
++        _ => false,
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn workbook() -> Workbook {
++        let mut workbook = Workbook::new();
++        let sheet = workbook.worksheet_mut(0).unwrap();
++        for (row, value) in [5.0, 15.0, 25.0].into_iter().enumerate() {
++            sheet.set_cell_value_at(row as u32, 0, value).unwrap();
++        }
++        sheet.set_cell_value("C1", 10.0).unwrap();
++        sheet.set_cell_value("B2", "x").unwrap();
++        workbook
++    }
++
++    fn matches(formula: &str, range: &str) -> Vec<String> {
++        conditional_formula_matches(&workbook(), 0, formula, &[CellRange::parse(range).unwrap()])
++            .iter()
++            .map(CellAddress::to_a1_string)
++            .collect()
++    }
++
++    #[test]
++    fn shifts_relative_references_and_keeps_absolute_ones() {
++        assert_eq!(matches("A1>$C$1", "A1:A3"), ["A2", "A3"]);
++    }
++
++    #[test]
++    fn shifts_columns_as_well_as_rows() {
++        assert_eq!(matches("LEN(TRIM(A1))=0", "A1:B3"), ["B1", "B3"]);
++    }
++
++    #[test]
++    fn treats_non_zero_numbers_as_true_and_errors_as_false() {
++        assert_eq!(matches("A1-5", "A1:A3"), ["A2", "A3"]);
++        assert_eq!(matches("1/0", "A1:A3"), Vec::<String>::new());
++    }
++
++    #[test]
++    fn checks_only_the_used_range() {
++        assert_eq!(matches("TRUE", "A1:A1048576"), ["A1", "A2", "A3"]);
++    }
++}
+diff --git a/crates/duke-sheets/src/lib.rs b/crates/duke-sheets/src/lib.rs
+index e8a890d..2ae4a48 100644
+--- a/crates/duke-sheets/src/lib.rs
++++ b/crates/duke-sheets/src/lib.rs
+@@ -39,6 +39,7 @@
+ //! ```
+ 
+ pub mod calculation;
++pub mod conditional_format;
+ pub mod prelude;
+ 
+ // Re-export calculation types

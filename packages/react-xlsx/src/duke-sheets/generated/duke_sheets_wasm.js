@@ -901,6 +901,28 @@ export class Worksheet {
         return takeFromExternrefTable0(ret[0]);
     }
     /**
+     * The cells where a conditional-format formula holds, as flat
+     * `[row, col, ...]` pairs. `ranges` are flat zero-based
+     * `[startRow, startCol, endRow, endCol, ...]` quadruples; the formula is
+     * written for the top-left cell of the first.
+     * @param {string} formula
+     * @param {Uint32Array} ranges
+     * @returns {Uint32Array}
+     */
+    conditionalFormulaMatches(formula, ranges) {
+        const ptr0 = passStringToWasm0(formula, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray32ToWasm0(ranges, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.worksheet_conditionalFormulaMatches(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v3 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v3;
+    }
+    /**
      * @returns {number}
      */
     get dataValidationCount() {
@@ -2485,6 +2507,13 @@ function handleError(f, args) {
 
 function isLikeNone(x) {
     return x === undefined || x === null;
+}
+
+function passArray32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getUint32ArrayMemory0().set(arg, ptr / 4);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passArray8ToWasm0(arg, malloc) {

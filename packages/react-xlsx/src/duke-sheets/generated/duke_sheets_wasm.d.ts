@@ -794,6 +794,13 @@ export class Worksheet {
     private constructor();
     free(): void;
     [Symbol.dispose](): void;
+    /**
+     * The cells where a conditional-format formula holds, as flat
+     * `[row, col, ...]` pairs. `ranges` are flat zero-based
+     * `[startRow, startCol, endRow, endCol, ...]` quadruples; the formula is
+     * written for the top-left cell of the first.
+     */
+    conditionalFormulaMatches(formula: string, ranges: Uint32Array): Uint32Array;
     getCalculatedValue(address: string): CellValue;
     getCalculatedValueAt(row: number, col: number): CellValue;
     getCell(address: string): CellValue;
@@ -1036,6 +1043,7 @@ export interface InitOutput {
     readonly workbook_setWorkbookProtection: (a: number, b: any) => [number, number];
     readonly workbook_sheetCount: (a: number) => [number, number, number];
     readonly workbook_sheetNames: (a: number) => [number, number, number, number];
+    readonly worksheet_conditionalFormulaMatches: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly worksheet_getCalculatedValue: (a: number, b: number, c: number) => [number, number, number];
     readonly worksheet_getCalculatedValueAt: (a: number, b: number, c: number) => [number, number, number];
     readonly worksheet_getCell: (a: number, b: number, c: number) => [number, number, number];

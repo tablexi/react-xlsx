@@ -145,6 +145,7 @@ export const workbook_saveXlsxBytesEncrypted: (a: number, b: number, c: number, 
 export const workbook_setWorkbookProtection: (a: number, b: any) => [number, number];
 export const workbook_sheetCount: (a: number) => [number, number, number];
 export const workbook_sheetNames: (a: number) => [number, number, number, number];
+export const worksheet_conditionalFormulaMatches: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
 export const worksheet_getCalculatedValue: (a: number, b: number, c: number) => [number, number, number];
 export const worksheet_getCalculatedValueAt: (a: number, b: number, c: number) => [number, number, number];
 export const worksheet_getCell: (a: number, b: number, c: number) => [number, number, number];

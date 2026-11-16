@@ -12,6 +12,7 @@ import { getCellGeneralAlignment } from "./cell-alignment";
 import { getColumnFontMeasurements, getUnmeasuredWorkbookFont, restoreColumnFontMeasurements, collectWorkbookFormControls, mergeWorkbookImageAssets, revokeWorkbookImageAssets, type WorkbookImageAssets, resolveSheetColumnWidthPixels, resolveWorksheetDefaultColumnWidthPixels, resolveWorksheetDefaultRowHeightPixels, resolveWorksheetMergeMetadata } from "./images";
 import type { WorkbookStructureAssets } from "./images";
 import { safeCalculate } from "./safe-calculate";
+import { withConditionalFormulaMatches } from "./conditional-format-formulas";
 import { pivotWorkbook, readPivotTables } from "./pivots";
 import { getSheetsWasmModule } from "./wasm";
 import type { XlsxChart, XlsxChartsheet, XlsxCellAddress, XlsxCellRange, XlsxDataValidation, XlsxFormControl, XlsxFreezePanes, XlsxSheetData, XlsxSheetVisibility, XlsxTable, XlsxThemePalette, XlsxWorkbookTab } from "./types";
@@ -319,7 +320,7 @@ function buildSheetList(
         colStyleIds: sheetState?.colStyleIds ?? {},
         colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
         colWidths: [],
-        conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
+        conditionalFormatRules: withConditionalFormulaMatches(sheetState?.conditionalFormatRules ?? [], worksheet),
         dataValidations: parseWorksheetDataValidations(worksheet),
         officeLayout: sheetState?.officeLayout,
         defaultColWidthPx,
@@ -386,7 +387,7 @@ function buildSheetList(
       colStyleIds: sheetState?.colStyleIds ?? {},
       colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
       colWidths: visibleCols.map(resolveColumnWidthPx),
-      conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
+      conditionalFormatRules: withConditionalFormulaMatches(sheetState?.conditionalFormatRules ?? [], worksheet),
       dataValidations: parseWorksheetDataValidations(worksheet),
       officeLayout: sheetState?.officeLayout,
       defaultColWidthPx,

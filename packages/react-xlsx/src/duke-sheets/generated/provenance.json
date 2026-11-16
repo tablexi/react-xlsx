@@ -2,12 +2,12 @@
   "repository": "https://github.com/guseggert/duke-sheets.git",
   "commit": "fec1cd04dbefa5eb65a41d29399ca4a7edc220f2",
   "version": "0.1.24",
-  "sourceDigest": "4106a7a7d334ebdeaffd30636bfab6ab4d3ad120549b7add90eb70cc53b5b8e7",
+  "sourceDigest": "67497202adc5a5eb3cbe06ff2cc5c9ea110687201ca9da9a38c1e954b560e5ff",
   "outputs": {
-    "duke_sheets_wasm.js": "5a7c8ad77a66ac3a1b2cc618bffa16e2acd65532663d390dbc093c6753307523",
-    "duke_sheets_wasm.d.ts": "45f06e5d335f15d6389a9198bc6dce39f1405b93b61052b2c7fc69b81584676c",
-    "duke_sheets_wasm_bg.wasm": "2025af7b20f2ff091b4dc8db6985aaa8cb6af549c8d867e85e260d02e4749542",
-    "duke_sheets_wasm_bg.wasm.d.ts": "752527999bfcaecb28bb3b004ccf4854c11f71cad457384765ac4609319c01d7",
+    "duke_sheets_wasm.js": "9f7f89a6a68d57afb0d711145d9c31e6de5b4496d3d0c9fb598e2702ff0559a4",
+    "duke_sheets_wasm.d.ts": "f6adc9dd5942f7a75b74c4b07b60ee15ebe9dd59b71a101457cf98ce7113d0ba",
+    "duke_sheets_wasm_bg.wasm": "37178346063baabf4c5ae83ba99d9bca0ca71786db321419cbc91d9305e1bb5f",
+    "duke_sheets_wasm_bg.wasm.d.ts": "37fd3de1a600c793f431c71c0a3d64bf38b47d4481a0f8505d8a323223b629cc",
     "LICENSE": "ebb2e920800c6353474e3e23d84f714ee8aaecd8f5a71851aa03594a4129d855"
   }
 }

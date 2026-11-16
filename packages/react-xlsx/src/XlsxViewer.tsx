@@ -6026,6 +6026,23 @@ function getStyledConditionalRules(rules: XlsxSheetData["conditionalFormatRules"
   return styledRules;
 }
 
+// A formula-based rule's matching cells, worked out by the parser (see
+// conditional-format-formulas.ts), as a lookup built once per rule.
+const conditionalMatchedCellsByRule = new WeakMap<XlsxConditionalStyledRuleEntry, Set<string>>();
+
+function getConditionalMatchedCells(rule: XlsxConditionalStyledRuleEntry) {
+  let cells = conditionalMatchedCellsByRule.get(rule);
+  if (!cells) {
+    cells = new Set();
+    const pairs = rule.matchedCells ?? [];
+    for (let index = 0; index + 1 < pairs.length; index += 2) {
+      cells.add(`${pairs[index]}:${pairs[index + 1]}`);
+    }
+    conditionalMatchedCellsByRule.set(rule, cells);
+  }
+  return cells;
+}
+
 function resolveConditionalCellStyleForCell(
   row: number,
   col: number,
@@ -6055,14 +6072,20 @@ function resolveConditionalCellStyleForCell(
       continue;
     }
 
-    if (numericValue === undefined) {
-      numericValue = readNumericValue();
-    }
-    if (textValue === undefined) {
-      textValue = readTextValue();
-    }
-    if (!resolveConditionalStyledRuleMatch(rule, numericValue, textValue, worksheet, sheet, batchedCells)) {
-      continue;
+    if (rule.matchedCells) {
+      if (!getConditionalMatchedCells(rule).has(`${row}:${col}`)) {
+        continue;
+      }
+    } else {
+      if (numericValue === undefined) {
+        numericValue = readNumericValue();
+      }
+      if (textValue === undefined) {
+        textValue = readTextValue();
+      }
+      if (!resolveConditionalStyledRuleMatch(rule, numericValue, textValue, worksheet, sheet, batchedCells)) {
+        continue;
+      }
     }
 
     matchedStyles.push(rule.style);
