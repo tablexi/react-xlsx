@@ -21,6 +21,7 @@ import { pxToOfficeColumnWidth, pxToSheetColumnWidth, rectToImageAnchor, refresh
 import { safeCalculate, tryRecalculate } from "./safe-calculate";
 import { parseXlsxRange } from "./range-reference";
 import { expandHighlightedRange } from "./range-highlight";
+import { withConditionalFormulaMatches } from "./conditional-format-formulas";
 import { getSheetsWasmModule } from "./wasm";
 import { XlsxWorkerClient } from "./worker-client";
 import type {
@@ -351,7 +352,7 @@ function buildSheetList(
         columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
         colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
         colStyleIds: sheetState?.colStyleIds ?? {},
-        conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
+        conditionalFormatRules: withConditionalFormulaMatches(sheetState?.conditionalFormatRules ?? [], worksheet),
         dataValidations: parseWorksheetDataValidations(worksheet),
         officeLayout: sheetState?.officeLayout,
         defaultColWidthPx,
@@ -453,7 +454,7 @@ function buildSheetList(
       columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
       colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
       colStyleIds: sheetState?.colStyleIds ?? {},
-      conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
+      conditionalFormatRules: withConditionalFormulaMatches(sheetState?.conditionalFormatRules ?? [], worksheet),
       dataValidations: parseWorksheetDataValidations(worksheet),
       officeLayout: sheetState?.officeLayout,
       defaultColWidthPx,

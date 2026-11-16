@@ -84,6 +84,11 @@ export interface XlsxConditionalStyledRule {
   equalAverage?: boolean;
   formulas: string[];
   kind: "styled";
+  /**
+   * For rules tested by a formula, the cells where it holds, worked out by
+   * the parser, as flat `[row, col, ...]` pairs.
+   */
+  matchedCells?: number[];
   operator?: string;
   percent?: boolean;
   priority: number;
