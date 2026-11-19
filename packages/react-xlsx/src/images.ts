@@ -3565,7 +3565,10 @@ async function renderWorkbookShapes(assets: WorkbookImageAssets, theme: ThemeSta
         sheetIndex: shape.sheetIndex,
         src: createImageSource(strToU8(rendered.svg), "image/svg+xml", assets.objectUrls),
         workbookSheetIndex,
-        zIndex: shape.zIndex
+        // One drawing layer (the viewer's drawingLayer scales by 1024) below
+        // the shape, whose text is drawn over it. At an equal layer the
+        // viewer draws pictures after shapes, which would hide the text.
+        zIndex: shape.zIndex - 1 / 1024
       });
       shape.fill = { none: true };
       shape.stroke = { none: true };
