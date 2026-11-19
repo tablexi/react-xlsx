@@ -17,7 +17,8 @@ export { XlsxFileSizeLimitExceededError } from "./errors";
 import type { DrawingAnchor as DukeDrawingAnchor, DrawingColor as DukeDrawingColor, DrawingInput as DukeDrawingInput, DrawingRunFont as DukeDrawingRunFont, DrawingText as DukeDrawingText, FormControlDrawing as DukeFormControlDrawing, FormControlKind as DukeFormControlKind, FormControlKindInput as DukeFormControlKindInput, Workbook } from "./duke-sheets/generated/duke_sheets_wasm.js";
 import { applyChartSeriesFormula, buildChartSeriesFormula, refreshChartRenderSource, loadWorkbookChartAssets, updateWorkbookChartAnchor, updateWorkbookChartDefinition, type WorkbookChartAssets } from "./charts";
 import { resolveWorkbookColor, resolveWorkbookFillStyle } from "./colors";
-import { pxToOfficeColumnWidth, pxToSheetColumnWidth, rectToImageAnchor, refreshWorkbookFormControls, resolveContentSheetAxisPixels, resolveWorksheetDefaultColumnWidthPixels, resolveWorksheetDefaultRowHeightPixels, resolveWorksheetHiddenCols, resolveWorksheetHiddenRows, resolveWorksheetMergeMetadata, resolveSheetColumnWidthPixels, resolveRenderedSheetAxisPixels, resolveSheetRowHeightPixels, resizeImageRect, revokeWorkbookImageAssets, updateWorkbookImageAnchor, xlsxAnchorToDukeDrawingAnchor, type WorkbookImageAssets, type WorkbookImageSheetOrigin } from "./images";
+import { pxToOfficeColumnWidth } from "./column-widths";
+import { pxToSheetColumnWidth, rectToImageAnchor, refreshWorkbookFormControls, resolveContentSheetAxisPixels, resolveWorksheetDefaultColumnWidthPixels, resolveWorksheetDefaultRowHeightPixels, resolveWorksheetHiddenCols, resolveWorksheetHiddenRows, resolveWorksheetMergeMetadata, resolveSheetColumnWidthPixels, resolveRenderedSheetAxisPixels, resolveSheetRowHeightPixels, resizeImageRect, revokeWorkbookImageAssets, updateWorkbookImageAnchor, xlsxAnchorToDukeDrawingAnchor, type WorkbookImageAssets, type WorkbookImageSheetOrigin } from "./images";
 import { safeCalculate, tryRecalculate } from "./safe-calculate";
 import { parseXlsxRange } from "./range-reference";
 import { expandHighlightedRange } from "./range-highlight";
@@ -1298,6 +1299,7 @@ function downloadUrl(src: string, fileName: string) {
 export function useXlsxViewerController(options: UseXlsxViewerControllerOptions): XlsxViewerController {
   const {
     allowResizeInReadOnly = false,
+    columnWidths,
     deferLoadingAboveBytes = DEFAULT_DEFER_LOADING_ABOVE_BYTES,
     file,
     fileName,
@@ -1481,7 +1483,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     const defaultFonts = loadSpreadsheetFonts(["Calibri", "Arial"]);
     const forced = shouldForceReadOnlyForBuffer(buffer.byteLength);
     const editable = !requestedReadOnly && !forced;
-    const snapshot = await getWorkerClient().loadWorkbook(buffer, skipXmlParsing, showHiddenSheets, editable || !useWorker);
+    const snapshot = await getWorkerClient().loadWorkbook(buffer, skipXmlParsing, showHiddenSheets, editable || !useWorker, columnWidths);
     if (!isCurrent()) return;
     await Promise.all([defaultFonts, loadSpreadsheetFonts(snapshot.fontFamilies)]);
     if (!isCurrent()) return;
@@ -1503,7 +1505,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     setIsWorkerBacked(!nextWorkbook);
     setSortState(null);
     setIsLoading(false);
-  }, [getWorkerClient, requestedReadOnly, setChartAssets, setImageAssets, shouldForceReadOnlyForBuffer, showHiddenSheets, skipXmlParsing, useWorker]);
+  }, [columnWidths, getWorkerClient, requestedReadOnly, setChartAssets, setImageAssets, shouldForceReadOnlyForBuffer, showHiddenSheets, skipXmlParsing, useWorker]);
 
   const refreshWorkbookState = React.useCallback((targetWorkbook: Workbook) => {
     setPivotTables(readPivotTables(targetWorkbook));
@@ -3158,7 +3160,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     worksheet.setColumnWidth(
       col,
       activeSheet.officeLayout
-        ? pxToOfficeColumnWidth(widthPx, activeSheet.officeLayout.columnDigitWidthPt)
+        ? pxToOfficeColumnWidth(widthPx, activeSheet.officeLayout)
         : pxToSheetColumnWidth(resolveContentSheetAxisPixels(widthPx, activeSheet.showGridLines))
     );
     refreshWorkbookState(workbook);
@@ -3517,7 +3519,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     let nextAssets: WorkbookImageAssets | null = null;
     let published = false;
     try {
-      nextAssets = await loadWorkbookImageAssets(bytes, next);
+      nextAssets = await loadWorkbookImageAssets(bytes, next, false, undefined, columnWidths);
       const latest = drawingMutationState.current;
       if (epoch !== drawingMutationEpoch.current || generation !== loadGenerationRef.current || latest.workbook !== state.workbook || latest.revision !== state.revision || latest.readOnly) {
         revokeWorkbookImageAssets(nextAssets);
@@ -3548,7 +3550,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       if (!published) { revokeWorkbookImageAssets(nextAssets); next.free(); }
       throw cause;
     }
-  }, [createHistoryEntry, ensureChartAssetsHydrated, getWorkerClient, readOnly, refreshWorkbookState, setImageAssets, sheets, workbook]);
+  }, [columnWidths, createHistoryEntry, ensureChartAssetsHydrated, getWorkerClient, readOnly, refreshWorkbookState, setImageAssets, sheets, workbook]);
 
   const pasteDrawing = React.useCallback(async (data: DrawingClipboard): Promise<boolean> => {
     if (readOnly || !activeSheet || !workbook) return false;

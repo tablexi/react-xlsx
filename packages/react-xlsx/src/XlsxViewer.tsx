@@ -33,10 +33,10 @@ import { DefaultXlsxPivotTableFieldList } from "./pivot-field-list";
 import { MemoChartSvg } from "./lazy-chart";
 import { preloadChartRenderers } from "./chart-loader";
 import { resolvePicturePaintRect } from "./picture-paint";
+import { resolveOfficeColumnWidthPixels } from "./column-widths";
 import {
   emuToPixels,
   resizeImageRect,
-  resolveOfficeColumnWidthPixels,
   resolveRenderedSheetAxisPixels,
   resolveSheetColumnWidthPixels,
   resolveSheetRowHeightPixels
@@ -8439,7 +8439,7 @@ function XlsxGrid({
           if (override !== undefined && override !== original?.sourcePx) return override;
           const width = worksheet?.getColumnWidth(index);
           return width !== undefined && width !== null
-            ? resolveOfficeColumnWidthPixels(width, office.columnDigitWidthPt)
+            ? resolveOfficeColumnWidthPixels(width, office)
             : original?.sizePx ?? office.defaultColumnPx;
         });
       }

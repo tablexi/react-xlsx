@@ -304,12 +304,18 @@ function createBasicWorkbookAssets(workbook: Workbook): WorkbookImageAssets {
   };
 }
 
-export async function loadWorkbookImageAssets(bytes: Uint8Array, workbook: Workbook, skipXmlParsing = false, archive?: Record<string, Uint8Array>) {
+export async function loadWorkbookImageAssets(
+  bytes: Uint8Array,
+  workbook: Workbook,
+  skipXmlParsing = false,
+  archive?: Record<string, Uint8Array>,
+  columnWidths?: "points" | "pixels"
+) {
   if (shouldSkipXmlParsingForWorkbook(bytes, skipXmlParsing) || !isZipWorkbook(bytes)) {
     return createBasicWorkbookAssets(workbook);
   }
 
-  const parsedAssets = await parseWorkbookImageAssets(bytes, workbook, archive);
+  const parsedAssets = await parseWorkbookImageAssets(bytes, workbook, archive, columnWidths);
   const apiImagesByWorkbookSheetIndex = collectWorksheetApiImages(workbook, parsedAssets.objectUrls);
   const hiddenImageAnchorsByWorkbookSheetIndex = collectHiddenWorksheetImageAnchors(workbook);
 
