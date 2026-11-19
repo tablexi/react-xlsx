@@ -11,6 +11,12 @@ import type {
 } from "./duke-sheets/generated/duke_sheets_wasm.js";
 import { strFromU8, strToU8, zipSync } from "fflate";
 import { resolveWorkbookColor } from "./colors";
+import {
+  MIN_COL_WIDTH_PX,
+  resolveColumnDigitWidths,
+  resolveOfficeColumnWidthPixels,
+  resolveOfficeDefaultColumnPixels
+} from "./column-widths";
 import type {
   XlsxOfficeLayout,
   XlsxCellAddress,
@@ -43,7 +49,6 @@ const IMAGE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/re
 const HYPERLINK_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
 const DRAWING_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.drawing+xml";
 const EMU_PER_PIXEL = 9525;
-const MIN_COL_WIDTH_PX = 30;
 const MIN_ROW_HEIGHT_PX = 16;
 const DEFAULT_COL_WIDTH_EMU = 64 * EMU_PER_PIXEL;
 const DEFAULT_ROW_HEIGHT_EMU = 20 * EMU_PER_PIXEL;
@@ -112,6 +117,7 @@ function measureColumnCharacterWidthPx(fontFamily?: string | null, fontSizePt?: 
   return width;
 }
 
+/** The font's widest digit at its point size, in points, unrounded (see resolveColumnDigitWidths). */
 function measureOfficeDigitWidthPt(fontFamily?: string | null, fontSizePt?: number | null) {
   const family = fontFamily?.trim() || "Calibri";
   const size = typeof fontSizePt === "number" && fontSizePt > 0 ? fontSizePt : 11;
@@ -120,9 +126,9 @@ function measureOfficeDigitWidthPt(fontFamily?: string | null, fontSizePt?: numb
   if (cached !== undefined) return cached;
   const context = typeof document !== "undefined" ? document.createElement("canvas").getContext("2d")
     : typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(32, 32).getContext("2d") : null;
-  if (!context) return 6;
+  if (!context) return 5.5;
   context.font = `${size}px ${JSON.stringify(family)}, "Carlito"`;
-  const width = Math.max(1, Math.round(Math.max(...Array.from("0123456789", digit => context.measureText(digit).width))));
+  const width = Math.max(1, Math.max(...Array.from("0123456789", digit => context.measureText(digit).width)));
   columnCharacterWidthCache.set(key, width);
   return width;
 }
@@ -306,6 +312,7 @@ type WorkbookSheetState = {
 };
 
 type ParseWorkbookStructureOptions = {
+  columnWidths?: "points" | "pixels";
   includeCachedFormulaValues?: boolean;
   themePalette?: XlsxThemePalette | null;
 };
@@ -1730,15 +1737,18 @@ function parseSheetState(
   );
 
   const defaultRowHeight = Number(sheetFormatNode?.getAttribute("defaultRowHeight") ?? 15);
-  const digitWidthPt = measureOfficeDigitWidthPt(options?.defaultFont?.family, options?.defaultFont?.sizePt);
-  const storedColumnPixels = (width: number) => resolveOfficeColumnWidthPixels(width, digitWidthPt);
+  const digitWidths = resolveColumnDigitWidths(
+    measureOfficeDigitWidthPt(options?.defaultFont?.family, options?.defaultFont?.sizePt),
+    options?.columnWidths
+  );
+  const storedColumnPixels = (width: number) => resolveOfficeColumnWidthPixels(width, digitWidths);
   const explicitDefaultWidth = Number(sheetFormatNode?.getAttribute("defaultColWidth") ?? Number.NaN);
   const baseWidth = Number(sheetFormatNode?.getAttribute("baseColWidth") ?? 8);
   const officeLayout: XlsxOfficeLayout = {
-    columnDigitWidthPt: digitWidthPt,
+    ...digitWidths,
     defaultColumnPx: Number.isFinite(explicitDefaultWidth) && explicitDefaultWidth > 0
       ? storedColumnPixels(explicitDefaultWidth)
-      : ((Number.isFinite(baseWidth) && baseWidth > 0 ? baseWidth : 8) * digitWidthPt + 5) * (4 / 3),
+      : resolveOfficeDefaultColumnPixels(Number.isFinite(baseWidth) && baseWidth > 0 ? baseWidth : 8, digitWidths),
     defaultRowPx: (Number.isFinite(defaultRowHeight) && defaultRowHeight > 0 ? defaultRowHeight : 15) * (4 / 3),
     columns: {},
     rows: {}
@@ -3631,7 +3641,8 @@ async function renderWorkbookPictures(assets: WorkbookImageAssets, theme: ThemeS
 export async function parseWorkbookImageAssets(
   bytes: Uint8Array,
   workbook?: Workbook,
-  parsedArchive?: ArchiveEntries
+  parsedArchive?: ArchiveEntries,
+  columnWidths?: ParseWorkbookStructureOptions["columnWidths"]
 ): Promise<WorkbookImageAssets> {
   const archive = parsedArchive ?? decodeWorkbookArchive(bytes);
   const {
@@ -3644,7 +3655,7 @@ export async function parseWorkbookImageAssets(
     theme,
     themePalette,
     workbookSheets
-  } = parseWorkbookStructureAssetsFromArchive(archive);
+  } = parseWorkbookStructureAssetsFromArchive(archive, { columnWidths });
   const objectUrls: string[] = [];
   const formControlsByWorkbookSheetIndex: XlsxFormControl[][] = [];
   const imagesByWorkbookSheetIndex: XlsxImage[][] = [];
@@ -4262,17 +4273,6 @@ export function pixelsToEmu(value: number) {
 
 export function pxToSheetColumnWidth(widthPx: number) {
   return (Math.max(widthPx, MIN_COL_WIDTH_PX) - 5) / 7;
-}
-
-export function resolveOfficeColumnWidthPixels(width: number, digitWidthPt = 6) {
-  return Math.max(0, Math.floor(
-    ((256 * width + Math.floor(128 / digitWidthPt)) / 256) * digitWidthPt
-  ) * (4 / 3));
-}
-
-export function pxToOfficeColumnWidth(widthPx: number, digitWidthPt = 6) {
-  const points = Math.round(Math.max(widthPx, MIN_COL_WIDTH_PX) * (3 / 4));
-  return (points + 0.5) / digitWidthPt - Math.floor(128 / digitWidthPt) / 256;
 }
 
 export function resolveSheetColumnWidthPixels(width: number, columnWidthCharacterWidthPx?: number) {

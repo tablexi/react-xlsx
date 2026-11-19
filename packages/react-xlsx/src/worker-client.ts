@@ -39,6 +39,7 @@ export type WorkerMessage =
         buffer: ArrayBuffer;
         includeSnapshot?: boolean;
         columnFontMeasurements?: Array<[string, number]>;
+        columnWidths?: "points" | "pixels";
         showHiddenSheets?: boolean;
         skipXmlParsing?: boolean;
         wasmSource?: WorkerWasmSource;
@@ -190,8 +191,14 @@ export class XlsxWorkerClient {
     this.worker?.terminate();
   }
 
-  async loadWorkbook(buffer: ArrayBuffer, skipXmlParsing = false, showHiddenSheets = false, includeSnapshot = false) {
-    this.loadPayload = { buffer, columnFontMeasurements: Array.from(columnFontMeasurements), includeSnapshot, showHiddenSheets, skipXmlParsing };
+  async loadWorkbook(
+    buffer: ArrayBuffer,
+    skipXmlParsing = false,
+    showHiddenSheets = false,
+    includeSnapshot = false,
+    columnWidths?: "points" | "pixels"
+  ) {
+    this.loadPayload = { buffer, columnFontMeasurements: Array.from(columnFontMeasurements), columnWidths, includeSnapshot, showHiddenSheets, skipXmlParsing };
     const result = await this.withFallback(async () => {
       const workerBuffer = cloneArrayBufferForTransfer(buffer);
       return this.request<XlsxWorkerLoadResult>({

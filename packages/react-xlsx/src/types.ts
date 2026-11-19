@@ -130,6 +130,8 @@ export type XlsxSheetVisibility = "hidden" | "veryHidden" | "visible";
 
 export interface XlsxOfficeLayout {
   columnDigitWidthPt?: number;
+  /** Set when columns use whole-pixel digit widths (`columnWidths: "pixels"`). */
+  columnDigitWidthPx?: number;
   defaultColumnPx: number;
   defaultRowPx: number;
   columns: Record<number, { sourcePx: number; sizePx: number }>;
@@ -1102,6 +1104,16 @@ export interface UseXlsxViewerControllerOptions {
    * @default false
    */
   showHiddenSheets?: boolean;
+  /**
+   * How stored column widths become pixels. `"points"` sizes columns from the
+   * font's digit width in whole points. `"pixels"` uses whole-pixel digit
+   * widths, as Excel for Windows and Excel for the web do, so a default
+   * Calibri 11 column is 64px rather than 73px; drawings anchored across
+   * columns then keep the proportions they have there.
+   *
+   * @default "points"
+   */
+  columnWidths?: "points" | "pixels";
   /**
    * Skips supplemental viewer metadata and uses the bundled native workbook metadata.
    * This is automatically used for legacy `.xls` files.

@@ -595,7 +595,13 @@ export function createWorkbookRuntime() {
   let tablesByWorkbookSheetIndex: XlsxTable[][] = [];
   let tabs: XlsxWorkbookTab[] = [];
 
-  async function loadWorkbook(buffer: ArrayBuffer, skipXmlParsing = false, showHiddenSheets = false, includeSnapshot = false): Promise<XlsxWorkerLoadResult> {
+  async function loadWorkbook(
+    buffer: ArrayBuffer,
+    skipXmlParsing = false,
+    showHiddenSheets = false,
+    includeSnapshot = false,
+    columnWidths?: "points" | "pixels"
+  ): Promise<XlsxWorkerLoadResult> {
     const wasmModule = await getSheetsWasmModule();
     if (disposed) throw new DOMException("Aborted", "AbortError");
     configureWorkbookXmlDecoder(wasmModule.parseXmlTree);
@@ -647,7 +653,7 @@ export function createWorkbookRuntime() {
       const unmeasuredFont = effectiveSkipXmlParsing ? null : getUnmeasuredWorkbookFont(archive);
       if (unmeasuredFont) await loadSpreadsheetFonts([unmeasuredFont], typeof document === "undefined" ? globalThis as unknown as Document : document);
       workbookFontFamilies = fontFamilies;
-      const imageAssets = await loadWorkbookImageAssets(bytes, nextWorkbook, effectiveSkipXmlParsing, archive);
+      const imageAssets = await loadWorkbookImageAssets(bytes, nextWorkbook, effectiveSkipXmlParsing, archive, columnWidths);
       if (disposed) {
         revokeWorkbookImageAssets(imageAssets);
         throw new DOMException("Aborted", "AbortError");
@@ -719,7 +725,13 @@ export function createWorkbookRuntime() {
       }
       case "load": {
         restoreColumnFontMeasurements(message.payload.columnFontMeasurements ?? []);
-        return loadWorkbook(message.payload.buffer, message.payload.skipXmlParsing, message.payload.showHiddenSheets, message.payload.includeSnapshot);
+        return loadWorkbook(
+          message.payload.buffer,
+          message.payload.skipXmlParsing,
+          message.payload.showHiddenSheets,
+          message.payload.includeSnapshot,
+          message.payload.columnWidths
+        );
       }
       case "getCellSnapshot": {
         if (!workbook) {

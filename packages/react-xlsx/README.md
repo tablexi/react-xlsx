@@ -53,6 +53,14 @@ Workbook loading prepares shared fallbacks for Calibri, Arial, Times New Roman, 
 
 Each family is a separate lazy JavaScript chunk with embedded WOFF2 data. Deploy the generated chunks alongside the viewer; no font CDN is required. The package includes `dist/Office-Font-Licenses.txt`.
 
+### Column widths
+
+Workbooks store column widths in characters of the default font's digit width. By default the viewer measures that digit in whole points. Set `columnWidths="pixels"` to measure it in whole pixels instead, as Excel for Windows and Excel for the web do: a default Calibri 11 column is then 64px rather than 73px, and pictures and shapes anchored across several columns keep the proportions they have there.
+
+```tsx
+<XlsxViewer src="/report.xlsx" columnWidths="pixels" />
+```
+
 ## WebAssembly Asset
 
 Workbook parsing and calculation run through the `@dukelib/sheets-wasm` WebAssembly module. The module loads lazily, on the first workbook parse.
